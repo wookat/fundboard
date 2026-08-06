@@ -35,6 +35,31 @@
     <p class="text-xs text-slate-400 mt-2">各板块为对应美股代表性 ETF/个股等权平均隔夜涨跌幅，悬停可看成分。</p>
   </section>
 
+  <section class="mb-6 us-only">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-bold flex items-center gap-2">
+        <span class="inline-block w-1.5 h-5 bg-violet-500 rounded"></span>我的定投计划
+        <span class="px-2 py-0.5 rounded-full text-xs bg-violet-50 text-violet-600 border border-violet-100">AI 智能定投</span>
+      </h2>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+      <div class="flex flex-wrap items-center gap-2">
+        <select id="planTarget" class="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white">
+          <option value="NDX">纳斯达克100</option>
+          <option value="SPX">标普500</option>
+        </select>
+        <div class="flex items-center gap-1 text-sm">
+          <span class="text-slate-500">基准每日定投</span>
+          <input id="planBase" type="number" min="1" placeholder="100" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-24 bg-white">
+          <span class="text-slate-500">元</span>
+        </div>
+        <button id="planGo" class="text-xs px-3 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700">AI 给出今日定投建议</button>
+      </div>
+      <div id="planResult" class="mt-3 text-sm hidden"></div>
+      <p class="text-xs text-slate-400 mt-2">AI 根据当日涨跌、量能、均线趋势等专业指标给出今日建议投入金额（大跌加码、高位减码/暂停），设置仅存您本机。<b>仅供参考，不构成投资建议</b>。</p>
+    </div>
+  </section>
+
   <section id="aiPanel" class="mb-6 cn-only hidden">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-lg font-bold flex items-center gap-2">
@@ -44,6 +69,19 @@
       <button id="aiRefresh" class="text-xs px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700">刷新分析</button>
     </div>
     <div id="aiBody" class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-sm text-slate-500">点击“刷新分析”获取 AI 实时分析…</div>
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mt-3">
+      <div class="flex flex-wrap items-center gap-2 mb-2">
+        <span class="font-semibold text-sm">💼 我的持仓</span>
+        <span class="text-xs text-slate-400">添加您持有的基金，AI 结合今日市况逐只给出专业建议（仅存您本机，不上传）</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <input id="hCode" placeholder="输入基金代码6位数字，如 110026" maxlength="6" inputmode="numeric" class="text-sm border border-slate-200 rounded-lg px-3 py-2 w-56 bg-white">
+        <button id="hAdd" class="text-xs px-3 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-700">添加</button>
+        <button id="hAnalyze" class="text-xs px-3 py-2 rounded-lg bg-violet-600 text-white hover:bg-violet-700">AI 分析我的持仓</button>
+      </div>
+      <div id="hList" class="flex flex-wrap gap-2 mt-3"></div>
+      <div id="hResult" class="mt-3 text-sm hidden"></div>
+    </div>
     <p class="text-xs text-slate-400 mt-2">AI 分析基于公开量价数据由大模型生成，<b>仅供参考，不构成任何投资建议</b>。</p>
   </section>
 
@@ -258,6 +296,90 @@ fetchTimeout(DATA_URL,4000).then(r=>r.ok?r:Promise.reject()).catch(()=>fetch('da
 document.getElementById('mktUS').addEventListener('click',()=>setMarket('us'));
 document.getElementById('mktCN').addEventListener('click',()=>setMarket('cn'));
 document.getElementById('aiRefresh').addEventListener('click',loadAI);
+
+// ---- 我的持仓 ----
+function getHoldings(){try{return JSON.parse(localStorage.getItem('holdings')||'[]');}catch(e){return[];}}
+function saveHoldings(h){localStorage.setItem('holdings',JSON.stringify(h));}
+function renderHoldings(){
+  const h=getHoldings();
+  document.getElementById('hList').innerHTML=h.map(c=>`
+    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-xs">
+      ${c}<button data-del="${c}" class="text-slate-400 hover:text-red-500 font-bold">×</button>
+    </span>`).join('')||'<span class="text-xs text-slate-400">暂无持仓，请添加基金代码</span>';
+}
+document.getElementById('hAdd').addEventListener('click',()=>{
+  const v=document.getElementById('hCode').value.trim();
+  if(!/^\d{6}$/.test(v)){alert('请输入 6 位基金代码');return;}
+  const h=getHoldings();
+  if(h.includes(v)){alert('已在持仓中');return;}
+  if(h.length>=10){alert('最多添加 10 只');return;}
+  h.push(v);saveHoldings(h);renderHoldings();
+  document.getElementById('hCode').value='';
+});
+document.getElementById('hCode').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('hAdd').click();});
+document.getElementById('hList').addEventListener('click',e=>{
+  const c=e.target.dataset.del;
+  if(c){saveHoldings(getHoldings().filter(x=>x!==c));renderHoldings();}
+});
+
+// ---- 美股定投计划 ----
+try{
+  const p=JSON.parse(localStorage.getItem('dcaPlan')||'null');
+  if(p){document.getElementById('planTarget').value=p.target;document.getElementById('planBase').value=p.base;}
+}catch(e){}
+document.getElementById('planGo').addEventListener('click',async()=>{
+  const target=document.getElementById('planTarget').value;
+  const base=+document.getElementById('planBase').value;
+  const box=document.getElementById('planResult');
+  box.classList.remove('hidden');
+  if(!base||base<1){box.innerHTML='<span class="text-red-500">请先输入基准定投金额</span>';return;}
+  localStorage.setItem('dcaPlan',JSON.stringify({target,base}));
+  box.innerHTML='<span class="animate-pulse text-slate-500">AI 正在分析今日美股量价数据，约需 10-20 秒…</span>';
+  try{
+    const d=await (await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:{target,base}})})).json();
+    const ai=d.ai||{};
+    if(d.error||ai.error){box.innerHTML='<span class="text-red-500">'+(d.error||ai.error)+'</span>';return;}
+    const sigCls={'加码':'bg-red-500 text-white','正常':'bg-slate-200 text-slate-700','减码':'bg-emerald-100 text-emerald-700','暂停':'bg-emerald-600 text-white'};
+    box.innerHTML=`
+      <div class="flex flex-wrap items-center gap-2 mb-1">
+        <span class="px-3 py-1 rounded-full text-sm font-bold ${sigCls[ai.signal]||'bg-slate-100'}">${ai.signal||'--'}</span>
+        <span class="text-lg font-bold">今日建议投入：${ai.today_amount==null?'--':ai.today_amount+' 元'}</span>
+        <span class="text-xs text-slate-400">(${ai.multiplier||''}，基准 ${d.base} 元 · ${d.target})</span>
+      </div>
+      <div class="text-xs text-slate-500 leading-5">${ai.view||''}</div>`;
+  }catch(e){box.innerHTML='<span class="text-red-500">分析失败，请稍后重试</span>';}
+});
+document.getElementById('hAnalyze').addEventListener('click',async()=>{
+  const h=getHoldings();
+  const box=document.getElementById('hResult');
+  box.classList.remove('hidden');
+  if(!h.length){box.innerHTML='<span class="text-slate-400">请先添加持仓基金代码</span>';return;}
+  box.innerHTML='<span class="animate-pulse text-slate-500">AI 正在结合今日市况分析您的持仓，约需 15-30 秒…</span>';
+  try{
+    const d=await (await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({holdings:h})})).json();
+    const ai=d.ai||{};
+    if(d.error||ai.error){box.innerHTML='<span class="text-red-500">'+(d.error||ai.error)+'</span>';return;}
+    const sigCls={'加仓':'bg-red-500 text-white','减仓':'bg-emerald-600 text-white','持有':'bg-slate-200 text-slate-700','持有观望':'bg-slate-200 text-slate-700'};
+    const navOf=c=>{const f=(d.holdings||[]).find(x=>x.code===c)||{};return f;};
+    box.innerHTML=`
+      <div class="flex items-center gap-2 mb-2">
+        <span class="px-3 py-1 rounded-full text-sm font-bold ${sigCls[(ai.overall||{}).signal]||'bg-slate-100'}">持仓总体：${(ai.overall||{}).signal||'--'}</span>
+        <span class="text-slate-600">${(ai.overall||{}).reason||''}</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        ${(ai.holdings||[]).map(a=>{const f=navOf(a.code);return`
+          <div class="border border-slate-100 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-semibold">${a.name||f.name||a.code}</span>
+              <span class="px-2 py-0.5 rounded-full text-xs ${sigCls[a.signal]||'bg-slate-100'}">${a.signal||''}</span>
+            </div>
+            <div class="text-xs text-slate-400 mb-1">${a.code} · 净值${f.nav||'--'}(${f.nav_date||''}) · 当日${f.day_chg_pct>0?'+':''}${f.day_chg_pct||'--'}% · 近5日${f.chg5>0?'+':''}${f.chg5==null?'--':f.chg5}%</div>
+            <div class="text-xs text-slate-500 leading-5">${a.view||''}</div>
+          </div>`;}).join('')}
+      </div>`;
+  }catch(e){box.innerHTML='<span class="text-red-500">分析失败，请稍后重试</span>';}
+});
+renderHoldings();
 document.getElementById('secToggle').addEventListener('click',()=>{
   const g=document.getElementById('secGrid');
   const hidden=g.style.display==='none';
