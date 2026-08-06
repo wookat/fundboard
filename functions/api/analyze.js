@@ -63,7 +63,7 @@ async function computeUS() {
   const out = [];
   for (const [code, name] of US_INDICES) {
     const kj = await (await fetch(
-      `https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=${code},day,,,60,qfq`,
+      `https://web.ifzq.gtimg.cn/appstock/app/usfqkline/get?param=${code},day,,,60,qfq`,
       { headers: { Referer: "https://gu.qq.com/" } }
     )).json();
     const days = (kj.data?.[code]?.day || []).map((d) => ({ date: d[0], close: +d[2], vol: +d[5] }));
