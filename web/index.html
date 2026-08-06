@@ -150,7 +150,8 @@ function renderCards(){
   }).join('');
 }
 
-fetch('data.json').then(r=>r.json()).then(d=>{
+const DATA_URL='https://raw.githubusercontent.com/wookat/fundboard/main/web/data.json';
+fetch(DATA_URL,{cache:'no-store'}).catch(()=>null).then(r=>r&&r.ok?r:fetch('data.json')).then(r=>r.json()).then(d=>{
   DATA=d;
   document.getElementById('updated').textContent='更新于 '+(d.updated||'').replace('T',' ');
   renderCards(); renderSectors(); render();
