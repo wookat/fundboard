@@ -111,6 +111,7 @@ function adviceBadge(a){
 }
 
 function render(){
+  if(!DATA){return;}
   const q=document.getElementById('q').value.trim();
   const offOnly=document.getElementById('offOnly').checked;
   const src=market==='cn'?(DATA.cn_funds||[]):DATA.funds;
@@ -221,6 +222,7 @@ async function loadAI(){
 }
 
 function renderCards(){
+  if(!DATA){document.getElementById('idxCards').innerHTML='<div class="text-sm text-slate-400">数据加载中…</div>';return;}
   document.getElementById('idxCards').innerHTML=Object.entries(DATA.indices).map(([k,v])=>{
     const adv=DATA.advice[k]||{};
     return `<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
@@ -238,10 +240,20 @@ function renderCards(){
 }
 
 const DATA_URL='https://raw.githubusercontent.com/wookat/fundboard/main/web/data.json';
-fetch(DATA_URL,{cache:'no-store'}).catch(()=>null).then(r=>r&&r.ok?r:fetch('data.json')).then(r=>r.json()).then(d=>{
+setMarket('us');
+function fetchTimeout(url,ms){
+  const c=new AbortController();
+  setTimeout(()=>c.abort(),ms);
+  return fetch(url,{cache:'no-store',signal:c.signal});
+}
+fetchTimeout(DATA_URL,4000).then(r=>r.ok?r:Promise.reject()).catch(()=>fetch('data.json',{cache:'no-store'})).then(r=>r.json()).then(d=>{
   DATA=d;
   document.getElementById('updated').textContent='更新于 '+(d.updated||'').replace('T',' ');
-  renderSectors(); setMarket('us');
+  renderSectors();
+  if(market==='us')renderCards();
+  render();
+}).catch(()=>{
+  document.getElementById('idxCards').innerHTML='<div class="text-sm text-red-500">数据加载失败，请刷新重试</div>';
 });
 document.getElementById('mktUS').addEventListener('click',()=>setMarket('us'));
 document.getElementById('mktCN').addEventListener('click',()=>setMarket('cn'));
