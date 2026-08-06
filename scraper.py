@@ -159,6 +159,47 @@ def fetch_purchase_limit(code: str) -> str:
     return ""
 
 
+CN_TRACKS: list[tuple[str, re.Pattern]] = [
+    ("沪深300", re.compile(r"沪深300")),
+    ("上证50", re.compile(r"上证50")),
+    ("中证500", re.compile(r"中证500")),
+    ("创业板", re.compile(r"创业板")),
+    ("科创50", re.compile(r"科创50")),
+]
+CN_EXCLUDE = re.compile(r"价值|成长|行业|非银|地产|医药|低波动|红利|国企")
+
+
+def discover_cn_funds(limit_per: int = 10) -> dict[str, dict]:
+    funds: dict[str, dict] = {}
+    counts: dict[str, int] = {}
+    for pi in range(1, 6):
+        url = (
+            "https://fund.eastmoney.com/data/rankhandler.aspx?op=ph&dt=kf&ft=zs"
+            f"&rs=&gs=0&sc=jzzzl&st=desc&pi={pi}&pn=500&dx=1"
+        )
+        txt = _get(url).text
+        entries = re.findall(r'"(\d{6}),([^,"]+),', txt)
+        if not entries:
+            break
+        for code, name in entries:
+            if CN_EXCLUDE.search(name):
+                continue
+            for track, pat in CN_TRACKS:
+                if pat.search(name):
+                    if counts.get(track, 0) >= limit_per:
+                        break
+                    counts[track] = counts.get(track, 0) + 1
+                    funds[code] = {
+                        "code": code,
+                        "name": name,
+                        "track": track,
+                        "onmarket": code[:2] in {"15", "51", "56", "58"},
+                        "company": "",
+                    }
+                    break
+    return funds
+
+
 def fetch_indices() -> dict:
     txt = _get("https://qt.gtimg.cn/q=usNDX,usINX").text
     out = {}
@@ -250,6 +291,7 @@ def suggestion(idx_chg_pct: float, streak_up: int) -> tuple[str, str]:
 def main() -> None:
     today = datetime.date.today().isoformat()
     funds = discover_funds()
+    cn_funds = discover_cn_funds()
     codes = sorted(funds)
     navs = fetch_navs(codes)
     indices = fetch_indices()
@@ -271,6 +313,22 @@ def main() -> None:
                 **nav,
                 "buy_status": hist[0]["buy_status"] if hist else "",
                 "purchase_limit": limit,
+                "history": hist[::-1],
+            }
+        )
+        time.sleep(0.3)
+
+    cn_rows = []
+    cn_codes = sorted(cn_funds)
+    cn_navs = fetch_navs(cn_codes)
+    for code in cn_codes:
+        hist = fetch_nav_history(code)
+        cn_rows.append(
+            {
+                **cn_funds[code],
+                **cn_navs.get(code, {}),
+                "buy_status": hist[0]["buy_status"] if hist else "",
+                "purchase_limit": "",
                 "history": hist[::-1],
             }
         )
@@ -306,6 +364,7 @@ def main() -> None:
                 "sectors": sectors,
                 "advice": advice,
                 "funds": rows,
+                "cn_funds": cn_rows,
             },
             ensure_ascii=False,
         ),

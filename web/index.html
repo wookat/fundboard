@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>美股指数基金日报 · 纳指100 / 标普500</title>
+<title>指数基金日报 · 美股 / A股</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
@@ -13,14 +13,17 @@
 <body class="bg-slate-50 text-slate-800">
 <div class="max-w-6xl mx-auto px-3 sm:px-6 py-6">
   <header class="mb-6">
-    <h1 class="text-2xl sm:text-3xl font-bold">美股指数基金日报</h1>
-    <p class="text-sm text-slate-500 mt-1">纳斯达克100 / 标普500 跟踪基金 · 每日净值 · 申购额度 · 加仓参考 <span id="updated" class="ml-2"></span></p>
-
+    <h1 class="text-2xl sm:text-3xl font-bold">指数基金日报</h1>
+    <p class="text-sm text-slate-500 mt-1">每日净值 · 申购额度 · 加仓参考 <span id="updated" class="ml-2"></span></p>
+    <div class="mt-4 inline-flex rounded-xl bg-white shadow-sm border border-slate-200 overflow-hidden">
+      <button id="mktUS" class="px-6 py-2.5 text-sm font-semibold">🇺🇸 查看美股</button>
+      <button id="mktCN" class="px-6 py-2.5 text-sm font-semibold">🇨🇳 查看A股</button>
+    </div>
   </header>
 
   <section id="idxCards" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6"></section>
 
-  <section class="mb-6">
+  <section class="mb-6 us-only">
     <div class="flex items-center justify-between mb-3">
       <h2 class="text-lg font-bold flex items-center gap-2">
         <span class="inline-block w-1.5 h-5 bg-amber-500 rounded"></span>全球产业数据
@@ -32,12 +35,20 @@
     <p class="text-xs text-slate-400 mt-2">各板块为对应美股代表性 ETF/个股等权平均隔夜涨跌幅，悬停可看成分。</p>
   </section>
 
-  <section class="mb-4 flex flex-wrap items-center gap-2">
-    <div id="tabs" class="inline-flex rounded-lg bg-white shadow-sm border border-slate-200 overflow-hidden text-sm">
-      <button data-track="ALL" class="tab px-4 py-2">全部</button>
-      <button data-track="NDX" class="tab px-4 py-2">纳指100</button>
-      <button data-track="SPX" class="tab px-4 py-2">标普500</button>
+  <section id="aiPanel" class="mb-6 cn-only hidden">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-bold flex items-center gap-2">
+        <span class="inline-block w-1.5 h-5 bg-violet-500 rounded"></span>AI 智能分析
+        <span class="px-2 py-0.5 rounded-full text-xs bg-violet-50 text-violet-600 border border-violet-100">量价 · 均线 · 趋势</span>
+      </h2>
+      <button id="aiRefresh" class="text-xs px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700">刷新分析</button>
     </div>
+    <div id="aiBody" class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 text-sm text-slate-500">点击“刷新分析”获取 AI 实时分析…</div>
+    <p class="text-xs text-slate-400 mt-2">AI 分析基于公开量价数据由大模型生成，<b>仅供参考，不构成任何投资建议</b>。</p>
+  </section>
+
+  <section class="mb-4 flex flex-wrap items-center gap-2">
+    <div id="tabs" class="inline-flex rounded-lg bg-white shadow-sm border border-slate-200 overflow-hidden text-sm"></div>
     <label class="text-sm text-slate-500 flex items-center gap-1 ml-2">
       <input type="checkbox" id="offOnly" class="accent-blue-600">仅场外（可申购）
     </label>
@@ -68,7 +79,9 @@
 </div>
 
 <script>
-let DATA=null, track='ALL', sortKey='day_chg_pct', sortDesc=true;
+let DATA=null, CN=null, track='ALL', sortKey='day_chg_pct', sortDesc=true, market='us';
+const US_TABS=[['ALL','全部'],['NDX','纳指100'],['SPX','标普500']];
+const CN_TABS=[['ALL','全部'],['沪深300','沪深300'],['上证50','上证50'],['中证500','中证500'],['创业板','创业板'],['科创50','科创50']];
 
 const fmt=(v,d=2)=>v==null||v===''?'--':(+v).toFixed(d);
 const cls=v=>+v>0?'up':(+v<0?'down':'');
@@ -100,7 +113,8 @@ function adviceBadge(a){
 function render(){
   const q=document.getElementById('q').value.trim();
   const offOnly=document.getElementById('offOnly').checked;
-  let rows=DATA.funds.filter(f=>(track==='ALL'||f.track===track)
+  const src=market==='cn'?(DATA.cn_funds||[]):DATA.funds;
+  let rows=src.filter(f=>(track==='ALL'||f.track===track)
     &&(!offOnly||!f.onmarket)
     &&(!q||f.name.includes(q)||f.code.includes(q)));
   rows.sort((a,b)=>{const x=+a[sortKey]||0,y=+b[sortKey]||0;return sortDesc?y-x:x-y;});
@@ -109,14 +123,14 @@ function render(){
     return `<tr class="border-t border-slate-100 hover:bg-slate-50">
       <td class="px-3 py-2">
         <div class="font-medium">${f.name}</div>
-        <div class="text-xs text-slate-400">${f.code} · ${f.track==='NDX'?'纳指100':'标普500'}${f.onmarket?' · 场内ETF':''}</div>
+        <div class="text-xs text-slate-400">${f.code} · ${f.track==='NDX'?'纳指100':f.track==='SPX'?'标普500':f.track}${f.onmarket?' · 场内ETF':''}</div>
       </td>
       <td class="px-3 py-2 text-right">${fmt(f.nav,4)}<div class="text-xs text-slate-400">${f.nav_date||''}</div></td>
       <td class="px-3 py-2 text-right font-semibold ${cls(f.day_chg_pct)}">${sign(f.day_chg_pct)}</td>
       <td class="px-3 py-2 text-center">${spark(f.history)}</td>
       <td class="px-3 py-2 text-center">${statusBadge(f.buy_status)}</td>
       <td class="px-3 py-2 text-center text-xs">${f.purchase_limit||(f.onmarket?'场内不限':'--')}</td>
-      <td class="px-3 py-2 text-center" title="${adv.reason||''}">${adviceBadge(adv.action||'--')}</td>
+      <td class="px-3 py-2 text-center" title="${adv.reason||''}">${market==='cn'?(aiSignalBadge(f.track)||adviceBadge('--')):adviceBadge(adv.action||'--')}</td>
     </tr>`;
   }).join('')||'<tr><td colspan="7" class="px-3 py-8 text-center text-slate-400">无匹配基金</td></tr>';
   document.querySelectorAll('.tab').forEach(b=>{
@@ -131,6 +145,79 @@ function renderSectors(){
       <div class="flex items-center gap-1.5 min-w-0"><span class="text-lg">${s.icon}</span><span class="text-sm font-medium truncate">${s.name}</span></div>
       <span class="text-sm font-semibold whitespace-nowrap ${cls(s.chg_pct)}">${arrow(s.chg_pct)}${sign(s.chg_pct)}</span>
     </div>`).join('');
+}
+
+function aiSignalBadge(){
+  const s=window.AI_OVERALL;
+  if(!s) return '';
+  const map={'加仓':'bg-red-500 text-white','减仓':'bg-emerald-600 text-white','持有观望':'bg-slate-100 text-slate-600'};
+  return `<span class="px-2 py-0.5 rounded-full text-xs ${map[s]||'bg-slate-100'}">AI：${s}</span>`;
+}
+
+function renderCNCards(){
+  document.getElementById('idxCards').innerHTML=(CN?CN.indices:[]).map(v=>`
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
+      <div>
+        <div class="text-sm text-slate-500">${v.name} <span class="text-xs">(${v.date||''})</span></div>
+        <div class="text-2xl font-bold mt-1">${fmt(v.close)}</div>
+        <div class="text-xs text-slate-400 mt-1">MA5 ${fmt(v.ma5)} · MA20 ${fmt(v.ma20)} · 量比 ${fmt(v.vol_ratio)}</div>
+      </div>
+      <div class="text-right">
+        <div class="text-xl font-bold ${cls(v.chg_pct)}">${sign(v.chg_pct)}</div>
+        <div class="text-xs text-slate-400 mt-1">连${v.streak>0?'涨':'跌'}${Math.abs(v.streak)}日 · 近5日${sign(v.chg5)}</div>
+        <div class="text-xs text-slate-400">${v.above_ma20?'站上':'跌破'}MA20</div>
+      </div>
+    </div>`).join('')||'<div class="text-sm text-slate-400">A股指数加载中…</div>';
+}
+
+function buildTabs(){
+  const tabs=market==='cn'?CN_TABS:US_TABS;
+  document.getElementById('tabs').innerHTML=tabs.map(([k,l])=>`<button data-track="${k}" class="tab px-4 py-2">${l}</button>`).join('');
+}
+
+function setMarket(m){
+  market=m; track='ALL'; buildTabs();
+  document.querySelectorAll('.us-only').forEach(e=>e.classList.toggle('hidden',m!=='us'));
+  document.querySelectorAll('.cn-only').forEach(e=>e.classList.toggle('hidden',m!=='cn'));
+  document.getElementById('mktUS').className='px-6 py-2.5 text-sm font-semibold '+(m==='us'?'bg-blue-600 text-white':'text-slate-600 hover:bg-slate-50');
+  document.getElementById('mktCN').className='px-6 py-2.5 text-sm font-semibold '+(m==='cn'?'bg-red-600 text-white':'text-slate-600 hover:bg-slate-50');
+  if(m==='cn'){
+    renderCNCards();
+    if(!CN) fetch('/api/cn').then(r=>r.json()).then(d=>{CN=d;if(market==='cn')renderCNCards();}).catch(()=>{});
+    if(!window.AI_LOADED){window.AI_LOADED=1;loadAI();}
+  }else{
+    renderCards();
+  }
+  render();
+}
+
+async function loadAI(){
+  const body=document.getElementById('aiBody');
+  body.innerHTML='<span class="animate-pulse">AI 正在分析量价数据，约需 10-20 秒…</span>';
+  try{
+    const d=await (await fetch('/api/analyze')).json();
+    CN=CN||{indices:d.indices}; if(market==='cn')renderCNCards();
+    const ai=d.ai||{};
+    if(ai.error){body.textContent=ai.error;return;}
+    window.AI_OVERALL=(ai.overall||{}).signal;
+    const sigCls={'加仓':'bg-red-500 text-white','减仓':'bg-emerald-600 text-white','持有观望':'bg-slate-200 text-slate-700'};
+    body.innerHTML=`
+      <div class="flex items-center gap-2 mb-3">
+        <span class="px-3 py-1 rounded-full text-sm font-bold ${sigCls[(ai.overall||{}).signal]||'bg-slate-100'}">总体：${(ai.overall||{}).signal||'--'}</span>
+        <span class="text-slate-600">${(ai.overall||{}).reason||''}</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        ${(ai.analysis||[]).map(a=>`
+          <div class="border border-slate-100 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-1">
+              <span class="font-semibold">${a.name}</span>
+              <span class="px-2 py-0.5 rounded-full text-xs ${sigCls[a.signal]||'bg-slate-100'}">${a.signal||''}</span>
+            </div>
+            <div class="text-xs text-slate-500 leading-5">${a.view||''}</div>
+          </div>`).join('')}
+      </div>`;
+    if(market==='cn')render();
+  }catch(e){body.textContent='AI 分析加载失败，请稍后重试';}
 }
 
 function renderCards(){
@@ -154,8 +241,11 @@ const DATA_URL='https://raw.githubusercontent.com/wookat/fundboard/main/web/data
 fetch(DATA_URL,{cache:'no-store'}).catch(()=>null).then(r=>r&&r.ok?r:fetch('data.json')).then(r=>r.json()).then(d=>{
   DATA=d;
   document.getElementById('updated').textContent='更新于 '+(d.updated||'').replace('T',' ');
-  renderCards(); renderSectors(); render();
+  renderSectors(); setMarket('us');
 });
+document.getElementById('mktUS').addEventListener('click',()=>setMarket('us'));
+document.getElementById('mktCN').addEventListener('click',()=>setMarket('cn'));
+document.getElementById('aiRefresh').addEventListener('click',loadAI);
 document.getElementById('secToggle').addEventListener('click',()=>{
   const g=document.getElementById('secGrid');
   const hidden=g.style.display==='none';
